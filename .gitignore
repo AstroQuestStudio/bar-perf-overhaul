@@ -1,0 +1,5 @@
+target/
+*.sdfz
+*.dll
+*.exe
+*.log

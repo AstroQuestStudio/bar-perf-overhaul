@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "crates/bar-perf-core",
+    "tools/bar-profiler",
+]
+resolver = "2"
