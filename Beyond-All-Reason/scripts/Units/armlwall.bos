@@ -1,0 +1,177 @@
+#define TA			// This is a TA script
+
+#include "sfxtype.h"
+#include "exptype.h"
+
+piece  base, top, spike1, spike2, spike3, spike4, spike5, spike6, spike7, spike8, spike9, spike10, spike11, spike12, flare;
+
+static-var  restore_delay, animate_speed;
+
+// Signal definitions
+#define SIG_AIM				2
+
+#include "../popup_openclose.h"
+
+static-var  Stunned;
+SetStunned(State)
+{
+    Stunned = State;
+	if (!Stunned) {
+	    start-script RestoreAfterDelay();
+	}
+}
+
+RestoreAfterDelay()
+{
+	sleep restore_delay;
+	start-script RequestClose();
+}
+
+CloseAnim()
+{
+	move spike1 to x-axis [12.32] speed animate_speed;
+	move spike4 to z-axis [12.32] speed animate_speed;
+	move spike7 to x-axis [-12.32] speed animate_speed;
+	move spike10 to z-axis [-12.32] speed animate_speed;
+
+	move spike2 to x-axis [12.32] speed animate_speed;
+	move spike5 to z-axis [12.32] speed animate_speed;
+	move spike8 to x-axis [-12.32] speed animate_speed;
+	move spike11 to z-axis [-12.32] speed animate_speed;
+
+	move spike3 to x-axis [12.32] speed animate_speed;
+	move spike6 to z-axis [12.32] speed animate_speed;
+	move spike9 to x-axis [-12.32] speed animate_speed;
+	move spike12 to z-axis [-12.32] speed animate_speed;
+
+	move top to y-axis [-24.62] speed animate_speed*2;
+	wait-for-move top along y-axis;
+	set ARMORED to 1;
+	wait-for-move spike1 along x-axis;
+	wait-for-move spike2 along x-axis;
+	wait-for-move spike3 along x-axis;
+}
+
+Create()
+{
+	hide flare;
+
+	restore_delay = 3000;
+	animate_speed = [24];
+
+	while( get BUILD_PERCENT_LEFT )
+	{
+		sleep 250;
+	}
+	sleep restore_delay;
+	start-script CloseBuildPose();
+}
+
+#define SMOKEPIECE base
+#include "smokeunit_thread_nohit.h"
+
+OpenAnim()
+{
+	set ARMORED to 0;
+	move spike1 to x-axis [8.32] speed animate_speed;
+	move spike4 to z-axis [8.32] speed animate_speed;
+	move spike7 to x-axis [-8.32] speed animate_speed;
+	move spike10 to z-axis [-8.32] speed animate_speed;
+	wait-for-move spike1 along x-axis;
+
+	move spike1 to x-axis [4.32] speed animate_speed;
+	move spike4 to z-axis [4.32] speed animate_speed;
+	move spike7 to x-axis [-4.32] speed animate_speed;
+	move spike10 to z-axis [-4.32] speed animate_speed;
+
+	move spike2 to x-axis [8.32] speed animate_speed;
+	move spike5 to z-axis [8.32] speed animate_speed;
+	move spike8 to x-axis [-8.32] speed animate_speed;
+	move spike11 to z-axis [-8.32] speed animate_speed;
+	wait-for-move spike2 along x-axis;
+
+	move spike1 to x-axis [0] speed animate_speed;
+	move spike4 to z-axis [0] speed animate_speed;
+	move spike7 to x-axis [0] speed animate_speed;
+	move spike10 to z-axis [0] speed animate_speed;
+
+	move spike2 to x-axis [4.32] speed animate_speed;
+	move spike5 to z-axis [4.32] speed animate_speed;
+	move spike8 to x-axis [-4.32] speed animate_speed;
+	move spike11 to z-axis [-4.32] speed animate_speed;
+
+	move spike3 to x-axis [8.32] speed animate_speed;
+	move spike6 to z-axis [8.32] speed animate_speed;
+	move spike9 to x-axis [-8.32] speed animate_speed;
+	move spike12 to z-axis [-8.32] speed animate_speed;
+	wait-for-move spike3 along x-axis;
+
+	move top to y-axis [0] speed animate_speed*2;
+	wait-for-move top along y-axis;
+	wait-for-move spike1 along x-axis;
+	wait-for-move spike2 along x-axis;
+}
+
+AimPrimary(heading, pitch)
+{
+	signal SIG_AIM;
+	set-signal-mask SIG_AIM;
+	start-script RequestOpen();
+	start-script RestoreAfterDelay();
+	while( !isOpen )
+	{
+		sleep 250;
+	}
+	return (1);
+}
+
+BlockShot1(targetID, block, userTarget)
+{
+	block = !isOpen;
+}
+
+FirePrimary()
+{
+	emit-sfx 1024+0 from flare;
+	sleep 150;
+}
+
+QueryPrimary(piecenum)
+{
+	piecenum = flare;
+}
+
+SweetSpot(piecenum)
+{
+	piecenum = base;
+}
+
+AimFromPrimary(piecenum)
+{
+	piecenum = flare;
+}
+
+Killed(severity, corpsetype)
+{
+	if( severity <= 25 )
+	{
+		corpsetype = 1 ;
+		explode base type BITMAPONLY | NOHEATCLOUD;
+		return(corpsetype);
+	}
+	if( severity <= 50 )
+	{
+		corpsetype = 2 ;
+		explode base type FIRE | SMOKE | FALL | NOHEATCLOUD;
+		return(corpsetype);
+	}
+	if( severity <= 99 )
+	{
+		corpsetype = 3 ;
+		explode base type SMOKE | FALL | NOHEATCLOUD;
+		return(corpsetype);
+	}
+	corpsetype = 3 ;
+	explode base type EXPLODE_ON_HIT | FIRE | SMOKE | FALL | NOHEATCLOUD;
+	return corpsetype;
+}

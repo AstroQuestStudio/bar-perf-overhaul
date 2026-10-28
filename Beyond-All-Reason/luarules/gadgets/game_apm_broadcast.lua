@@ -1,0 +1,109 @@
+local gadget = gadget ---@type Gadget
+
+function gadget:GetInfo()
+	return {
+		name = "APM Broadcast",
+		desc = "Broadcasts ActionsPerMinute",
+		author = "Floris",
+		date = "May 2024",
+		license = "GNU GPL, v2 or later",
+		layer = 99999999,
+		enabled = true,
+	}
+end
+
+if gadgetHandler:IsSyncedCode() then
+	local teamAddedActionFrame = {}
+	local ignoreUnits = {}
+	local gameFrame = Spring.GetGameFrame()
+	local startFrame = Spring.GetGameFrame() -- used in case of luarules reload
+	local spGetUnitIsBeingBuilt = Spring.GetUnitIsBeingBuilt
+
+	local totalTeamActions = {}
+	local teamList = Spring.GetTeamList()
+	for i = 1, #teamList do
+		totalTeamActions[teamList[i]] = 0
+	end
+	local ignoreUnitDefs = {}
+	for uDefID, uDef in pairs(UnitDefs) do
+		if uDef.customParams and uDef.customParams.drone then
+			ignoreUnitDefs[uDefID] = true
+		end
+	end
+
+	---Excludes the unit's next order from the team's APM count for one game frame.
+	---@param unitID UnitID
+	local function addSkipOrder(unitID)
+		ignoreUnits[unitID] = gameFrame + 1
+	end
+
+	function gadget:Initialize()
+		GG.apm = {}
+		GG.apm.addSkipOrder = addSkipOrder
+
+		gadgetHandler:RegisterAllowCommand(CMD.ANY)
+	end
+
+	function gadget:UnitFinished(unitID, unitDefID, teamID, builderID)
+		ignoreUnits[unitID] = gameFrame + 1
+	end
+
+	-- be aware that these aren't exclusively user actioned commands
+	function gadget:AllowCommand(unitID, unitDefID, teamID, cmdID, cmdParams, cmdOptions, cmdTag, fromSynced, fromLua)
+		-- limit to 1 action per gameframe
+		if teamAddedActionFrame[teamID] ~= gameFrame and totalTeamActions[teamID] and not ignoreUnitDefs[unitDefID] then
+			-- entries up to the current frame count as expired, they are pruned only now and then
+			local ignoreUntil = ignoreUnits[unitID]
+			if (not ignoreUntil or ignoreUntil <= gameFrame) and not spGetUnitIsBeingBuilt(unitID) then -- believe it or not but unitcreated can come after AllowCommand (with nocost at least)
+				totalTeamActions[teamID] = totalTeamActions[teamID] + 1
+				teamAddedActionFrame[teamID] = gameFrame
+			end
+		end
+		ignoreUnits[unitID] = gameFrame + 7 -- dont count severe cmd spam
+		return true
+	end
+
+	local SendToUnsynced = SendToUnsynced
+	local mathFloor = math.floor
+
+	function gadget:GameFrame(gf)
+		gameFrame = gf
+		if gf % 300 == 1 then -- every 10 secs
+			local frameToMinute = 1 / ((gf - startFrame) / 1800)
+			for teamID, totalActions in pairs(totalTeamActions) do
+				local apm = mathFloor(totalActions * frameToMinute + 0.5)
+				SendToUnsynced("apmBroadcast", teamID, apm)
+			end
+			for unitID, frame in pairs(ignoreUnits) do
+				if frame <= gf then
+					ignoreUnits[unitID] = nil
+				end
+			end
+		end
+	end
+
+	function gadget:TeamDied(teamID)
+		totalTeamActions[teamID] = nil
+	end
+else -- unsynced
+	-- The last figure per team, kept for other unsynced gadgets: the team stats gadget
+	-- samples it into its history.
+	local teamAPM = {}
+
+	local function handleApmEvent(_, teamID, apm)
+		teamAPM[teamID] = apm
+		if Script.LuaUI("ApmEvent") then
+			Script.LuaUI.ApmEvent(teamID, apm)
+		end
+	end
+
+	function gadget:Initialize()
+		GG.teamAPM = teamAPM
+		gadgetHandler:AddSyncAction("apmBroadcast", handleApmEvent)
+	end
+
+	function gadget:Shutdown()
+		GG.teamAPM = nil
+		gadgetHandler:RemoveSyncAction("apmBroadcast")
+	end
+end
